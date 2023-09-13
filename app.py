@@ -149,6 +149,79 @@ class S3Client(QMainWindow):
         centralWidget = QWidget()
         centralWidget.setLayout(layout)
         self.setCentralWidget(centralWidget)
+        # 应用QSS样式
+        self.apply_modern_style()
+
+    def apply_modern_style(self):
+        style_sheet = """
+            /* 基本设置 */
+            QWidget {
+                font: 14px 'Segoe UI';
+                color: #333;
+            }
+
+            QMainWindow, QDialog {
+                background: #fafafa;
+                padding: 10px;
+                border-radius: 5px;
+            }
+
+            /* 设定按钮的样式 */
+            QPushButton {
+                background: #4CAF50;  /* 绿色 */
+                border: none;
+                padding: 10px 20px;
+                text-align: center;
+                border-radius: 4px;
+                transition: 0.3s;
+                box-shadow: 2px 2px 15px rgba(0, 0, 0, 0.1);
+            }
+
+            QPushButton:hover {
+                background: #45a049;  /* 深绿色 */
+                transform: scale(1.05);  /* 稍微放大 */
+            }
+
+            QPushButton:pressed {
+                background: #388e3c;  /* 更深的绿色 */
+                box-shadow: 1px 1px 5px rgba(0, 0, 0, 0.2);
+                transform: scale(1.0);  /* 返回原始大小 */
+            }
+
+            /* 设定组合框样式 */
+            QComboBox {
+                padding: 5px;
+                border: 2px solid #4CAF50;
+                border-radius: 4px;
+                background-color: #ffffff;
+                selection-background-color: #4CAF50;
+                box-shadow: 2px 2px 15px rgba(0, 0, 0, 0.1);
+            }
+
+            QComboBox::drop-down {
+                border: none;
+            }
+
+            /* 设定列表部件样式 */
+            QListWidget {
+                border: 2px solid #4CAF50;
+                border-radius: 4px;
+                background-color: #ffffff;
+                alternate-background-color: #f0f0f0;
+                box-shadow: 2px 2px 15px rgba(0, 0, 0, 0.1);
+            }
+
+            /* 设置标签样式 */
+            QLabel {
+                color: #333;
+                background-color: #ffffff;
+                padding: 3px;
+                border-radius: 4px;
+                box-shadow: 2px 2px 15px rgba(0, 0, 0, 0.1);
+            }
+        """
+
+        self.setStyleSheet(style_sheet)
 
     def update_bucket_list(self):
         self.buckets = [bucket['Name'] for bucket in s3.list_buckets()['Buckets']]

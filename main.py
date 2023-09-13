@@ -1,32 +1,25 @@
 import os
 import sys
-import boto3
+
+from PyQt5 import QtWidgets
+
+from s3_pyclient import S3Client as s3
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QFileDialog,
-                             QListWidget, QVBoxLayout, QWidget, QComboBox, QLabel, QSpacerItem, QSizePolicy)
-import qtmodern.styles
-import qtmodern.windows
-from PyQt5.QtCore import QTimer
+                             QListWidget, QVBoxLayout, QWidget, QComboBox, QLabel)
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtWidgets import QInputDialog
 from PyQt5.QtWidgets import QGridLayout
-
-s3 = boto3.client('s3')
-
-
-class AutoCloseMessageBox(QMessageBox):
-    def __init__(self, timeout=3, parent=None):
-        super().__init__(parent)
-        self.timeout = timeout
-        self.setStyleSheet("QLabel{min-width: 200px;}")
-
-    def showEvent(self, event):
-        QTimer.singleShot(self.timeout * 1000, self.accept)
-        super().showEvent(event)
+from qt_material import apply_stylesheet, QtStyleTools
+from qt_ui import AutoCloseMessageBox
 
 
-class S3Client(QMainWindow):
+class S3ClientUI(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.editBucketPolicyBtn = None
+        self.enableStaticWebsiteBtn = None
+        self.emptyBucketBtn = None
+        self.downloadFolderBtn = None
         self.uploadFolderBtn = None
         self.deleteBucketBtn = None
         self.showBucketPolicyBtn = None
@@ -49,11 +42,6 @@ class S3Client(QMainWindow):
         # 主布局
         layout = QVBoxLayout()
 
-        # 添加切换主题的按钮
-        self.themeToggleBtn = QPushButton('Switch to Dark Mode', self)
-        self.themeToggleBtn.clicked.connect(self.toggle_theme)
-        layout.addWidget(self.themeToggleBtn)
-
         # Bucket选择
         self.bucketLabel = QLabel('Select Bucket:')
         self.bucketComboBox = QComboBox()
@@ -72,66 +60,54 @@ class S3Client(QMainWindow):
         # 上传按钮
         self.uploadBtn = QPushButton('Upload File', self)
         self.uploadBtn.clicked.connect(self.upload_file)
-        # btnGrid.addWidget(self.uploadBtn, 0, 0)  # 第一行第一列
 
         # 下载按钮
         self.downloadBtn = QPushButton('Download File', self)
         self.downloadBtn.clicked.connect(self.download_file)
-        # btnGrid.addWidget(self.downloadBtn, 0, 1)  # 第一行第二列
 
         # 删除文件按钮
         self.deleteBtn = QPushButton('Delete File', self)
         self.deleteBtn.clicked.connect(self.delete_file)
-        # btnGrid.addWidget(self.deleteBtn, 0, 2)  # 第一行第三列
 
         # 预签名URL按钮
         self.generateLinkBtn = QPushButton('Generate Pre-Signed URL', self)
         self.generateLinkBtn.clicked.connect(self.generate_presigned_url)
-        # btnGrid.addWidget(self.generateLinkBtn, 0, 3)  # 第一行第四列
 
         # Show Bucket Policy Button
         self.showBucketPolicyBtn = QPushButton('Show Bucket Policy', self)
         self.showBucketPolicyBtn.clicked.connect(self.show_bucket_policy)
-        # btnGrid.addWidget(self.showBucketPolicyBtn, 1, 0)  # 第二行第一列
 
         # Show Versioning Button
         self.showVersioningBtn = QPushButton('Show Versioning', self)
         self.showVersioningBtn.clicked.connect(self.show_versioning)
-        # btnGrid.addWidget(self.showVersioningBtn, 1, 1)  # 第二行第二列
 
         # Create Bucket Button
         self.createBucketBtn = QPushButton('Create New Bucket', self)
         self.createBucketBtn.clicked.connect(self.create_bucket)
-        # btnGrid.addWidget(self.createBucketBtn, 1, 2)  # 第二行第三列
 
         # Delete Bucket Button
         self.deleteBucketBtn = QPushButton('Delete Selected Bucket', self)
         self.deleteBucketBtn.clicked.connect(self.delete_bucket)
-        # btnGrid.addWidget(self.deleteBucketBtn, 1, 3)  # 第二行第四列
 
         # 上传文件夹按钮
         self.uploadFolderBtn = QPushButton('Upload Folder', self)
         self.uploadFolderBtn.clicked.connect(self.upload_folder)
-        # btnGrid.addWidget(self.uploadFolderBtn, 2, 0)  # 第三行第一列
 
         # 下载文件夹按钮
         self.downloadFolderBtn = QPushButton('Download Folder', self)
         self.downloadFolderBtn.clicked.connect(self.download_folder)
-        # btnGrid.addWidget(self.downloadFolderBtn, 2, 1)  # 第三行第二列
 
         # 编辑桶策略按钮
         self.editBucketPolicyBtn = QPushButton('Edit Bucket Policy', self)
         self.editBucketPolicyBtn.clicked.connect(self.edit_bucket_policy)
-        # btnGrid.addWidget(self.editBucketPolicyBtn, 2, 2)  # 第三行第三列
 
         # 开启静态网站按钮
         self.enableStaticWebsiteBtn = QPushButton('Enable Static Website', self)
         self.enableStaticWebsiteBtn.clicked.connect(self.enable_static_website)
-        # btnGrid.addWidget(self.enableStaticWebsiteBtn, 2, 3)  # 第三行第四列
 
         self.emptyBucketBtn = QPushButton('Empty Bucket', self)
         self.emptyBucketBtn.clicked.connect(self.empty_bucket)
-        # btnGrid.addWidget(self.emptyBucketBtn, 3, 0)  # 第三行第一列
+
         buttons = [
             [self.uploadBtn, self.downloadBtn, self.deleteBtn, self.generateLinkBtn],
             [self.showBucketPolicyBtn, self.showVersioningBtn, self.createBucketBtn, self.deleteBucketBtn],
@@ -149,93 +125,10 @@ class S3Client(QMainWindow):
         centralWidget = QWidget()
         centralWidget.setLayout(layout)
         self.setCentralWidget(centralWidget)
-        # 应用QSS样式
-        self.apply_modern_style()
-
-    def apply_modern_style(self):
-        style_sheet = """
-            /* 基本设置 */
-            QWidget {
-                font: 14px 'Segoe UI';
-                color: #333;
-            }
-
-            QMainWindow, QDialog {
-                background: #fafafa;
-                padding: 10px;
-                border-radius: 5px;
-            }
-
-            /* 设定按钮的样式 */
-            QPushButton {
-                background: #4CAF50;  /* 绿色 */
-                border: none;
-                padding: 10px 20px;
-                text-align: center;
-                border-radius: 4px;
-                transition: 0.3s;
-                box-shadow: 2px 2px 15px rgba(0, 0, 0, 0.1);
-            }
-
-            QPushButton:hover {
-                background: #45a049;  /* 深绿色 */
-                transform: scale(1.05);  /* 稍微放大 */
-            }
-
-            QPushButton:pressed {
-                background: #388e3c;  /* 更深的绿色 */
-                box-shadow: 1px 1px 5px rgba(0, 0, 0, 0.2);
-                transform: scale(1.0);  /* 返回原始大小 */
-            }
-
-            /* 设定组合框样式 */
-            QComboBox {
-                padding: 5px;
-                border: 2px solid #4CAF50;
-                border-radius: 4px;
-                background-color: #ffffff;
-                selection-background-color: #4CAF50;
-                box-shadow: 2px 2px 15px rgba(0, 0, 0, 0.1);
-            }
-
-            QComboBox::drop-down {
-                border: none;
-            }
-
-            /* 设定列表部件样式 */
-            QListWidget {
-                border: 2px solid #4CAF50;
-                border-radius: 4px;
-                background-color: #ffffff;
-                alternate-background-color: #f0f0f0;
-                box-shadow: 2px 2px 15px rgba(0, 0, 0, 0.1);
-            }
-
-            /* 设置标签样式 */
-            QLabel {
-                color: #333;
-                background-color: #ffffff;
-                padding: 3px;
-                border-radius: 4px;
-                box-shadow: 2px 2px 15px rgba(0, 0, 0, 0.1);
-            }
-        """
-
-        self.setStyleSheet(style_sheet)
 
     def update_bucket_list(self):
         self.buckets = [bucket['Name'] for bucket in s3.list_buckets()['Buckets']]
         self.bucketComboBox.addItems(self.buckets)
-        # self.list_files_in_bucket()  # 手动列出第一个存储桶的文件
-
-    def toggle_theme(self):
-        if self.dark_mode:
-            qtmodern.styles.light(app)
-            self.themeToggleBtn.setText('Switch to Dark Mode')
-        else:
-            qtmodern.styles.dark(app)
-            self.themeToggleBtn.setText('Switch to Light Mode')
-        self.dark_mode = not self.dark_mode
 
     def list_files_in_bucket(self):
         bucket_name = self.bucketComboBox.currentText()
@@ -275,7 +168,6 @@ class S3Client(QMainWindow):
         if selected_item:
             try:
                 url = s3.generate_presigned_url(
-                    'get_object',
                     Params={'Bucket': self.bucketComboBox.currentText(), 'Key': selected_item.text()},
                     ExpiresIn=3600
                 )
@@ -407,17 +299,7 @@ class S3Client(QMainWindow):
             s3.put_bucket_policy(Bucket=bucket_name, Policy=new_policy)
 
     def enable_static_website(self):
-        bucket_name = self.bucketComboBox.currentText()
-        index_doc = 'index.html'
-        error_doc = 'error.html'
-
-        s3.put_bucket_website(
-            Bucket=bucket_name,
-            WebsiteConfiguration={
-                'ErrorDocument': {'Key': error_doc},
-                'IndexDocument': {'Suffix': index_doc},
-            }
-        )
+        s3.put_bucket_website(Bucket=self.bucketComboBox.currentText())
 
     def empty_bucket(self):
         bucket_name = self.bucketComboBox.currentText()
@@ -448,8 +330,8 @@ class S3Client(QMainWindow):
 
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = S3Client()
-    modern_window = qtmodern.windows.ModernWindow(window)
-    modern_window.show()
-    sys.exit(app.exec_())
+    app = QtWidgets.QApplication(sys.argv)
+    window = S3ClientUI()
+    apply_stylesheet(app, theme='light_amber.xml', invert_secondary=True)
+    window.show()
+    app.exec_()

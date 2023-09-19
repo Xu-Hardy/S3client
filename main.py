@@ -1,16 +1,43 @@
 import os
 import sys
 
+import boto3
+
+os.environ['NO_PROXY'] = '*'
 from PyQt5 import QtWidgets
 
 from s3_pyclient import S3Client as s3
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QFileDialog,
-                             QListWidget, QVBoxLayout, QWidget, QComboBox, QLabel)
+                             QListWidget, QVBoxLayout, QWidget, QComboBox, QLabel, QProgressBar)
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtWidgets import QInputDialog
 from PyQt5.QtWidgets import QGridLayout
 from qt_material import apply_stylesheet, QtStyleTools
 from qt_ui import AutoCloseMessageBox
+from boto3.s3.transfer import TransferConfig, S3Transfer
+import time
+from PyQt5.QtCore import QThread, pyqtSignal
+
+
+class UploadThread(QThread):
+    progress_signal = pyqtSignal(int)  # Signal to emit progress
+
+    def __init__(self, s3_client, file_path, bucket_name):
+        super().__init__()
+        self.s3_client = s3_client
+        self.file_path = file_path
+        self.bucket_name = bucket_name
+
+    def run(self):
+        # Your logic to upload to S3 here
+        # Whenever you want to update the progress, emit a signal
+        # For example:
+        # self.progress_signal.emit(percentage)
+
+        # For demonstration purposes
+        for i in range(101):
+            time.sleep(0.1)  # simulate some work
+            self.progress_signal.emit(i)
 
 
 class S3ClientUI(QMainWindow):
@@ -122,10 +149,6 @@ class S3ClientUI(QMainWindow):
         # 将网格布局添加到主布局
         layout.addLayout(btnGrid)
 
-        centralWidget = QWidget()
-        centralWidget.setLayout(layout)
-        self.setCentralWidget(centralWidget)
-
         # 启用拖放
         self.listWidget.setAcceptDrops(True)
         self.listWidget.viewport().setAcceptDrops(True)
@@ -133,32 +156,33 @@ class S3ClientUI(QMainWindow):
         self.listWidget.dragEnterEvent = self.dragEnterEvent
         self.listWidget.dropEvent = self.dropEvent
 
-        # 定义拖放事件
+        # 上传的百分比标签和进度条
+        self.upload_percentage_label = QLabel("Upload Percentage:")
+        layout.addWidget(self.upload_percentage_label)
+        self.progressBar = QProgressBar(self)
+        layout.addWidget(self.progressBar)
 
+        centralWidget = QWidget()
+        centralWidget.setLayout(layout)
+        self.setCentralWidget(centralWidget)
+
+    # New method to check if the dragged data is valid
     def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
+        mime_data = event.mimeData()
+        if mime_data.hasUrls() and len(mime_data.urls()) == 1:  # Only one file at a time
             event.acceptProposedAction()
 
-    def dropEvent(self, event):
-        urls = event.mimeData().urls()
-        if len(urls) == 1:
-            filepath = urls[0].toLocalFile()
+        # New method to handle the dropped data
 
-            # 如果是文件则上传，如果是目录则询问用户是否要上传整个目录
-            if os.path.isfile(filepath):
-                self.upload_file(filepath)
-            elif os.path.isdir(filepath):
-                msgbox = QMessageBox()
-                msgbox.setWindowTitle("Upload Folder")
-                msgbox.setIcon(QMessageBox.Question)
-                msgbox.setText(f"Do you want to upload the entire folder: {filepath}?")
-                msgbox.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-                msgbox.setDefaultButton(QMessageBox.Yes)
-                reply = msgbox.exec_()
-                if reply == QMessageBox.Yes:
-                    self.upload_folder(filepath)
-        else:
-            # 如果拖入多个文件/目录，目前不处理，但您可以扩展此功能以支持批量上传。
+    def dropEvent(self, event):
+        url = event.mimeData().urls()[0]
+        filepath = url.toLocalFile()
+
+        # Check if a file or a folder
+        if os.path.isfile(filepath):
+            self.upload_file(filepath)
+        elif os.path.isdir(filepath):
+            # Optionally, you can handle folder drops here
             pass
 
     def update_bucket_list(self):
@@ -182,13 +206,21 @@ class S3ClientUI(QMainWindow):
         if not filepath:
             filepath, _ = QFileDialog.getOpenFileName(self, 'Select File to Upload')
         if filepath:
-            try:
-                file_name = filepath.split("/")[-1]
-                with open(filepath, 'rb') as file:
-                    s3.upload_fileobj(file, self.bucketComboBox.currentText(), file_name)
-                self.list_files_in_bucket()
-            except Exception as e:
-                self.listWidget.addItem(f"Error: {str(e)}")
+            self.progressBar.setValue(0)  # Reset progress bar
+            session = boto3.Session()
+            s3 = session.resource('s3')
+            # Use the thread
+            self.upload_thread = UploadThread(s3, filepath, self.bucketComboBox.currentText())
+            self.upload_thread.progress_signal.connect(self.update_progress)
+            self.upload_thread.error_signal.connect(self.handle_upload_error)
+            self.upload_thread.start()
+
+    def update_progress(self, percentage):
+        self.progressBar.setValue(percentage)
+        self.upload_percentage_label.setText(f"Upload Percentage: {percentage}%")
+
+    def handle_upload_error(self, error_message):
+        self.listWidget.addItem(f"Error: {error_message}")
 
     def download_file(self):
         file_name, _ = QFileDialog.getSaveFileName(self, 'Select where to save the file')

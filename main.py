@@ -126,6 +126,41 @@ class S3ClientUI(QMainWindow):
         centralWidget.setLayout(layout)
         self.setCentralWidget(centralWidget)
 
+        # 启用拖放
+        self.listWidget.setAcceptDrops(True)
+        self.listWidget.viewport().setAcceptDrops(True)
+        self.listWidget.setDragDropMode(QtWidgets.QAbstractItemView.DropOnly)
+        self.listWidget.dragEnterEvent = self.dragEnterEvent
+        self.listWidget.dropEvent = self.dropEvent
+
+        # 定义拖放事件
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        if len(urls) == 1:
+            filepath = urls[0].toLocalFile()
+
+            # 如果是文件则上传，如果是目录则询问用户是否要上传整个目录
+            if os.path.isfile(filepath):
+                self.upload_file(filepath)
+            elif os.path.isdir(filepath):
+                msgbox = QMessageBox()
+                msgbox.setWindowTitle("Upload Folder")
+                msgbox.setIcon(QMessageBox.Question)
+                msgbox.setText(f"Do you want to upload the entire folder: {filepath}?")
+                msgbox.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+                msgbox.setDefaultButton(QMessageBox.Yes)
+                reply = msgbox.exec_()
+                if reply == QMessageBox.Yes:
+                    self.upload_folder(filepath)
+        else:
+            # 如果拖入多个文件/目录，目前不处理，但您可以扩展此功能以支持批量上传。
+            pass
+
     def update_bucket_list(self):
         self.buckets = [bucket['Name'] for bucket in s3.list_buckets()['Buckets']]
         self.bucketComboBox.addItems(self.buckets)
@@ -143,8 +178,9 @@ class S3ClientUI(QMainWindow):
         except Exception as e:
             self.listWidget.addItem(f"Error: {str(e)}")
 
-    def upload_file(self):
-        filepath, _ = QFileDialog.getOpenFileName(self, 'Select File to Upload')
+    def upload_file(self, filepath=None):
+        if not filepath:
+            filepath, _ = QFileDialog.getOpenFileName(self, 'Select File to Upload')
         if filepath:
             try:
                 file_name = filepath.split("/")[-1]
@@ -251,8 +287,9 @@ class S3ClientUI(QMainWindow):
             except Exception as e:
                 self.listWidget.addItem(f"Error deleting bucket: {str(e)}")
 
-    def upload_folder(self):
-        folder_path = QFileDialog.getExistingDirectory(self, 'Select Folder to Upload')
+    def upload_folder(self, folder_path=None):
+        if not folder_path:
+            folder_path = QFileDialog.getExistingDirectory(self, 'Select Folder to Upload')
         if folder_path:
             folder_name = os.path.basename(folder_path)  # 获取文件夹的名字
             try:
